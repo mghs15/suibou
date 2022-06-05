@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset='utf-8' />
+<title>Web地図テンプレ</title>
+<meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+<script src='https://maps.gsi.go.jp/vector/mapbox/1.13.0/mapbox-gl-gsi.js'></script>
+<link href='https://maps.gsi.go.jp/vector/mapbox/1.13.0/mapbox-gl.css' rel='stylesheet' />
+<style>
+body { margin:0; padding:0;}
+
+
+#map {
+  position: absolute;
+  top: 0;
+  bottom: 0px;
+  width: 100%;
+}
+
+#menutop{
+  position: absolute;
+  width: 100%;
+  bottom: 0;
+  z-index: 99999;
+}
+
+#menu {
+  position: relative;
+  padding: 5px 20px ;
+  margin: 0 0;
+  background: #eeeeee;
+  box-shadow: 0px 0px 0px 0px #eeeeee;
+  font-family: 'Open Sans', sans-serif;
+  min-height: 30px;
+  //max-width: 350px;
+}
+button.local {
+  display: block;
+  text-align:center;
+  background: #dddddd;
+  padding 0 0.5em 0 0.5em;
+  border: solid 2px #ddd;
+  border-radius: 3px;
+  margin: 2.5px 0px 2.5px 0px;
+  line-height: 1.5em;
+  font-size: 1em;
+  width: 100%;
+}
+button.small {
+  text-align:center;
+  background: #dddddd;
+  padding 0 0.5em 0 0.5em;
+  border: solid 2px #aaa;
+  border-radius: 3px;
+  margin: 2.5px 0px 2.5px 0px;
+  line-height: 1.5em;
+  font-size: 1em;
+}
+
+#slider_01 {
+  //width: 80%;
+}
+
+#slider_02 {
+  //width: 80%;
+}
+
+#note {
+  position: relative;
+  color: #FF0000;
+  font-family: 'Open Sans', sans-serif;
+  font-weight: bold;
+  right: 0.5em;
+  text-align: right;
+  text-shadow: #FFFFFF 0.2em 0.2em 0.2em, #FFFFFF -0.2em 0.2em 0.2em, #FFFFFF 0.2em -0.2em 0.2em, #FFFFFF -0.2em -0.2em 0.2em;
+}
+
+#layer-list {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  display: grid;
+  grid-template-columns: auto;
+  max-height: 500px;
+  z-index: 99999;
+}
+
+.layer-list-item {
+  margin: 2px;
+  padding: 0 2px;
+  background: #EEEEFF;
+  border: solid 2px #FFFFFF;
+  border-radius: 4px;  
+  display: grid;
+  grid-template-columns: auto 26px;
+}
+
+.layer-list-item div {
+  margin: 2px;
+}
+
+.removeButton {
+  width: 22px;
+  height: 22px;
+  
+  background-color: #CC0000;
+  color: #FFFFFF;
+  border-radius: 5px;
+  font-weight: bold;
+  text-align: center;
+  cursor: pointer;  
+  border: solid 1px #555555;
+}
+
+#overlay-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #EEEEEE;
+  z-index: 1000000;
+  padding: 5px 20px;
+}
+
+table.popup-table {
+  //border-collapse: collapse;
+  border-top: solid 1px;
+  border-bottom: solid 1px;
+  margin-top: 5px;
+  width: 100%;
+}
+
+
+</style>
+<body>
+
+<div id='layer-list'></div>
+<div id='map'></div>
+
+<script>
+
+/*************************************************/
+/*Mapbox 関係設定                                */
+/*************************************************/
+const map = new mapboxgl.Map({
+  container: 'map', // container id
+  hash: true, //add #position on URL
+  style: './basic.json', // stylesheet location
+  center: [139.78148, 35.768793], // starting position [lng, lat]
+  zoom: 9, // starting zoom
+  minZoom: 6,
+  maxZoom: 17.99,
+  attributionControl: false,
+  //clickTolerance: 10,
+  localIdeographFontFamily: ['MS Gothic', 'Hiragino Kaku Gothic Pro', 'sans-serif']
+});
+
+
+map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+map.addControl(new mapboxgl.ScaleControl() );
+map.addControl(new mapboxgl.AttributionControl({compact: true}), 'top-right');
+
+map.showTileBoundaries = false;
+
+/*************************************************/
+/*DOM操作 関係設定                               */
+/*************************************************/
+
+const clearEle = (ele) => {
+  while( ele.firstChild ){
+    ele.removeChild( ele.firstChild );
+  }
+}
+
+/*************************************************/
+/*破堤点 関係設定                                */
+/*************************************************/
+
+const selectedCaseList = [];
+
+const removeCase = (ft) => {
+  const f = ft.properties || ft;
+  const tag = f.tag || `${f.OfficeCode}/L2/${f.RiverCode}/${f.BPName}/${f.BPName}_MAX`;
+  for( i in selectedCaseList){
+    if(selectedCaseList[i].properties.tag == tag){
+      selectedCaseList.splice(i, 1); 
+      break;
+    }
+  } 
+}
+
+map.on('load', () => {
+
+  console.log("MAP LOAD");
+  map.addSource('bpoints', {
+    "type": "geojson",
+    "data": "./dat/arakawa_bpoints.geojson",
+    "promoteId": "ID"
+  });
+  map.addLayer({
+    "type":"circle",
+    "source":"bpoints",
+    "id":"bpoints",
+    "minzoom":6,"maxzoom":18,
+    "paint":{
+      "circle-color": "hsl(210, 100%, 50%)",
+      "circle-radius": 5
+    },
+    "layout":{"visibility":"visible"}
+  });
+  
+  map.addSource('bpoints_selected', {
+    "type": "geojson",
+    "data": {
+      "type":"FeatureCollection",
+      "features": selectedCaseList
+    }
+  });
+  map.addLayer({
+    "type":"circle",
+    "source":"bpoints_selected",
+    "id":"bpoints_selected",
+    "minzoom":6,"maxzoom":18,
+    "paint":{
+      "circle-color": "hsl(0, 100%, 50%)",
+      "circle-radius": 8
+    },
+    "layout":{"visibility":"visible"}
+  });
+  
+});
+
+
+const addCaseView = (e) => {
+  
+  //レンダリングされた地物を取得
+  const features = map.queryRenderedFeatures(e.point,{layers: ["bpoints"]});
+  
+  if (!features.length) return;
+  
+  const ft = features[0]
+  const f = ft.properties;
+  const tag = `${f.OfficeCode}/L2/${f.RiverCode}/${f.BPName}/${f.BPName}_MAX`;
+  const url = `https://suiboumap.gsi.go.jp/shinsuimap/Tile/${tag}/overlayer/{z}/{x}/{y}.png`;
+  
+  f.tag = tag;
+  console.log(ft);  
+  
+  if(!map.getSource(tag)){
+    map.addSource(tag, {
+      "type": "raster",
+      "tiles": [ url ],
+      "minzoom": 2,
+      "maxzoom": 17, 
+      "attribution": "<a href='https://suiboumap.gsi.go.jp/' target='_blank'>浸水ナビ</a>"
+    });
+  }
+  
+  console.log(url);
+  
+  if(!map.getLayer(tag)){
+    map.addLayer({
+      "id": tag,
+      "type": "raster",
+      "source": tag,
+      "layout": { "visibility": "none" },
+      "paint": {
+        "raster-hue-rotate": 0
+      },
+      "minzoom":2,"maxzoom":17
+    }, "bpoints");
+  }
+  
+  changeCaseView(ft);
+  
+}
+
+const changeCaseView = (ft) => {
+  
+  const f = ft.properties;
+  const tag = `${f.OfficeCode}/L2/${f.RiverCode}/${f.BPName}/${f.BPName}_MAX`;
+  f.tag = tag;
+  
+  if(map.getLayer(tag).visibility == "none"){
+    map.moveLayer(tag, "bpoints");
+    map.setLayoutProperty(tag , "visibility", "visible");
+    selectedCaseList.unshift(ft);
+  }else if(map.getLayer(tag).visibility == "visible"){
+    map.setLayoutProperty(tag , "visibility", "none");
+    removeCase(ft);
+  }
+  
+  //console.log(map.getLayer(tag));
+  
+  
+  
+  //選択点
+  map.getSource('bpoints_selected').setData({
+    "type":"FeatureCollection",
+    "features": selectedCaseList
+  }); 
+  
+  //HTML レンダリング
+  renderLayerList();
+  
+}
+
+const renderLayerList = () => {
+  const pe = document.getElementById("layer-list");
+  clearEle(pe);
+  selectedCaseList.forEach( l => {
+  
+    const lp = l.properties;
+    
+    const el = document.createElement("div");
+    el.classList.add("layer-list-item");
+    el.id = lp.tag || `${lp.OfficeCode}/L2/${lp.RiverCode}/${lp.BPName}/${lp.BPName}_MAX`;
+    el.draggable = true;
+    addDragDropEvent("layer-list");
+    
+    const e1 = document.createElement("div");
+    e1.id = ( lp.tag || `${lp.OfficeCode}/L2/${lp.RiverCode}/${lp.BPName}/${lp.BPName}_MAX` ) + "_text";
+    e1.innerText = l.properties.BPLocation;
+    
+    const e2 = document.createElement("div");
+    e2.classList.add("removeButton");
+    e2.innerText = "x";
+    e2.addEventListener('click', (element) => {
+      changeCaseView(l);
+    }, false);
+    
+    el.appendChild(e1); el.appendChild(e2);
+    pe.appendChild(el);
+  });
+}
+
+
+
+const holdCard = {};
+const holdCardInitialize = () => {
+  holdCard.targetCard = ""; holdCard.from = ""; holdCard.to = ""; 
+};
+const addDragDropEvent = (fromId) => {
+  
+  const fromEle = document.getElementById(fromId);
+  const toEle = fromEle;
+  
+  if(!fromEle) return;
+  
+  fromEle.addEventListener('dragstart', (ele) => {
+    
+    //console.log(ele);
+    
+    if(holdCard.targetCard) return; //もし、ドラッグ中カードがすでに選ばれていたら何もしない
+    
+    holdCard.targetCard = ele.target;
+    
+  }, false);
+  
+  if(!toEle) return;
+  
+  toEle.addEventListener('dragover', (ele) => {
+    ele.preventDefault();
+  }, false);
+  
+  toEle.addEventListener('drop', (ele) => {
+    ele.preventDefault();
+    
+    //console.log(ele);
+    
+    if(!holdCard.targetCard) return; //もし、ドラッグ中カードがなければ何もしない
+    
+    const cardId = holdCard.targetCard.id; 
+    const replaceId = ele.target.id.replace(/_text/, ""); //最初にchildのidが取得されてしまうため、命名規則から親のidへ
+    
+    let insertNum;
+    let removeNum;
+    let tmpft;
+    
+    for( i in selectedCaseList){
+      if(selectedCaseList[i].properties.tag == cardId){
+        removeNum = i;
+        tmpft = selectedCaseList[i];
+      }
+      
+      if(selectedCaseList[i].properties.tag == replaceId){
+        insertNum = i;
+      }
+    }
+    
+    console.log(selectedCaseList);
+    console.log(cardId, removeNum, replaceId, insertNum);
+    
+    if(insertNum && removeNum){
+      
+      if(removeNum == insertNum){
+        
+      }else if(removeNum > insertNum){
+        console.log("分岐1");
+        selectedCaseList.splice(removeNum, 1);
+        selectedCaseList.splice(insertNum, 0, tmpft);
+      }else if(removeNum < insertNum){
+        console.log("分岐2");
+        const insertNum1 = parseInt(insertNum, 10) + 1;
+        console.log(insertNum1);
+        selectedCaseList.splice(insertNum1, 0, tmpft);
+        selectedCaseList.splice(removeNum, 1);
+      }
+      
+      holdCardInitialize();
+      
+      //順にHTMLレンダリング（先に追加されるほど、上）
+      renderLayerList();
+      
+      
+      //レイヤを順に移動させていく（先に追加されるほど下になるので、reverse）
+      //reverseだけだとin-placeなので、sliceを挟む
+      selectedCaseList.slice().reverse().forEach( ft => {
+        const tag = ft.properties.tag;
+        map.moveLayer(tag, "bpoints");
+      });
+      
+    }
+    
+  }, false);
+  
+}
+
+
+
+map.on('click', e => {addCaseView(e)} );
+
+/*************************************************/
+/*ポップアップ 関係設定                          */
+/*************************************************/
+
+const makePopupHtml = (prop) => {
+  
+  let htmlString = ""; //ポップアップ
+  let featureProperties = "";
+  for(name in prop){
+    featureProperties = featureProperties + "<tr><td style='vertical-align:top; color:#555555;'>" + name + "</td>"
+                      + "<td style='color:#000000;'>" + prop[name] + "</td></tr>";
+  }
+  htmlString = htmlString + "<table class='popup-table'>" + featureProperties + "</table>";
+  
+  return htmlString;
+  
+}
+
+const popup = new mapboxgl.Popup();
+map.on('click', function(e) {
+  
+  //初期化
+  popup.remove();
+  
+  //レンダリングされた地物を取得
+  const features = map.queryRenderedFeatures(e.point,{layers: ["bpoints"]});
+  
+  if (!features.length) {
+    popup.remove();
+    return;
+  }
+  
+  //ポップアップ表示処理
+  let htmlString = "";
+  features.forEach( feature => {
+    htmlString = htmlString + makePopupHtml(feature.properties);
+    console.log(feature.properties);
+  });
+  
+  if (!htmlString || htmlString == "") {
+    popup.remove();
+    return;
+  }
+  
+  popup.setLngLat([ e.lngLat.lng, e.lngLat.lat ])
+    .setHTML(htmlString)
+    .addTo(map);
+});
+
+</script>
+
+</body>
+</html>
